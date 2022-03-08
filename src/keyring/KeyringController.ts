@@ -230,6 +230,34 @@ export class KeyringController extends BaseController<
     return this.fullUpdate();
   }
 
+  private async addLedgerKeyring() {
+    return await privates.get(this).keyring.addNewKeyring(KeyringTypes.ledger);
+  }
+
+  private async getLedgerKeyring() {
+    const keyring = privates.get(this).keyring.getKeyringsByType(KeyringTypes.ledger)[0]
+
+    if(keyring) {
+      return keyring
+    }
+
+    return await this.addLedgerKeyring();
+  }
+
+  connectLedgerHardware = async (transport: any) => {
+    try {
+      const keyring = await this.getLedgerKeyring();
+      keyring.setTransport(transport)
+      const accounts = keyring.getFirstPage();
+      return {
+        ...accounts,
+        balance: '0x0'
+      }
+    } catch(e) {
+      console.log('err')
+    }
+  }
+
   /**
    * Effectively the same as creating a new keychain then populating it
    * using the given seed phrase.
