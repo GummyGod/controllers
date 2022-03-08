@@ -33,6 +33,7 @@ const privates = new WeakMap();
 export enum KeyringTypes {
   simple = 'Simple Key Pair',
   hd = 'HD Key Tree',
+  ledger = "Ledger"
 }
 
 /**
