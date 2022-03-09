@@ -247,17 +247,14 @@ export class KeyringController extends BaseController<
   }
 
   connectLedgerHardware = async (transport: any) => {
-    try {
-      const keyring = await this.getLedgerKeyring();
-      keyring.setTransport(transport);
-      const accounts = keyring.getFirstPage();
-      return {
-        ...accounts,
-        balance: '0x0',
-      };
-    } catch (e) {
-      console.log('err', e);
-    }
+    const keyring = await this.getLedgerKeyring();
+    keyring.setTransport(transport);
+    const addresses = await keyring.getFirstPage();
+
+    return addresses.map((address: string) => ({
+      address,
+      balance: '0x0',
+    }));
   };
 
   /**
