@@ -141,6 +141,8 @@ export class KeyringController extends BaseController<
 
   private setSelectedAddress: PreferencesController['setSelectedAddress'];
 
+  private setAccountLabel: PreferencesController['setAccountLabel'];
+
   /**
    * Creates a KeyringController instance.
    *
@@ -149,6 +151,7 @@ export class KeyringController extends BaseController<
    * @param options.syncIdentities - Sync identities with the given list of addresses.
    * @param options.updateIdentities - Generate an identity for each address given that doesn't already have an identity.
    * @param options.setSelectedAddress - Set the selected address.
+   * @param options.setAccountLabel - Set the selected address.
    * @param config - Initial options used to configure this controller.
    * @param state - Initial state to set on this controller.
    */
@@ -158,11 +161,13 @@ export class KeyringController extends BaseController<
       syncIdentities,
       updateIdentities,
       setSelectedAddress,
+      setAccountLabel,
     }: {
       removeIdentity: PreferencesController['removeIdentity'];
       syncIdentities: PreferencesController['syncIdentities'];
       updateIdentities: PreferencesController['updateIdentities'];
       setSelectedAddress: PreferencesController['setSelectedAddress'];
+      setAccountLabel: PreferencesController['setAccountLabel'];
     },
     config?: Partial<KeyringConfig>,
     state?: Partial<KeyringState>,
@@ -180,6 +185,7 @@ export class KeyringController extends BaseController<
     this.syncIdentities = syncIdentities;
     this.updateIdentities = updateIdentities;
     this.setSelectedAddress = setSelectedAddress;
+    this.setAccountLabel = setAccountLabel;
     this.initialize();
     this.fullUpdate();
   }
@@ -255,6 +261,34 @@ export class KeyringController extends BaseController<
       address,
       balance: '0x0',
     }));
+  };
+
+  unlockLedgerHardwareWalletAccount = async (accountIndex: number) => {
+    const keyring = await this.getLedgerKeyring();
+
+    keyring.setAccountToUnlock(accountIndex);
+
+    const oldAccounts = await privates.get(this).keyring.getAccounts();
+    await privates.get(this).keyring.addNewAccount(keyring);
+    const newAccounts = await privates.get(this).keyring.getAccounts();
+
+    this.updateIdentities(newAccounts);
+
+    newAccounts.forEach((address: string) => {
+      if (!oldAccounts.includes(address)) {
+        if (this.setAccountLabel) {
+          this.setAccountLabel(
+            address,
+            `${keyring.getName()} ${accountIndex + 1}`,
+          );
+        }
+        this.setSelectedAddress(address);
+      }
+    });
+
+    await privates.get(this).keyring.persistAllKeyrings();
+
+    return this.fullUpdate();
   };
 
   /**

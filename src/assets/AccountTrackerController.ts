@@ -48,6 +48,23 @@ export class AccountTrackerController extends BaseController<
 
   private handle?: NodeJS.Timer;
 
+  syncWithAddresses = async (addresses: string[]) => {
+    this.syncAccounts();
+    const { accounts } = this.state;
+    addresses.forEach((address) => {
+      accounts[address] = { balance: '0x0' };
+    });
+
+    for (const address in accounts) {
+      await safelyExecuteWithTimeout(async () => {
+        const balance = await query(this.ethQuery, 'getBalance', [address]);
+        accounts[address] = { balance: BNToHex(balance) };
+        this.update({ accounts: { ...accounts } });
+      });
+    }
+    return this.state.accounts;
+  };
+
   private syncAccounts() {
     const { accounts } = this.state;
     const addresses = Object.keys(this.getIdentities());
