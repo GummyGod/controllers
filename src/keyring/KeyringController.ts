@@ -33,7 +33,7 @@ const privates = new WeakMap();
 export enum KeyringTypes {
   simple = 'Simple Key Pair',
   hd = 'HD Key Tree',
-  ledger = "Ledger"
+  ledger = 'Ledger',
 }
 
 /**
@@ -235,10 +235,12 @@ export class KeyringController extends BaseController<
   }
 
   private async getLedgerKeyring() {
-    const keyring = privates.get(this).keyring.getKeyringsByType(KeyringTypes.ledger)[0]
+    const keyring = privates
+      .get(this)
+      .keyring.getKeyringsByType(KeyringTypes.ledger)[0];
 
-    if(keyring) {
-      return keyring
+    if (keyring) {
+      return keyring;
     }
 
     return await this.addLedgerKeyring();
@@ -247,16 +249,16 @@ export class KeyringController extends BaseController<
   connectLedgerHardware = async (transport: any) => {
     try {
       const keyring = await this.getLedgerKeyring();
-      keyring.setTransport(transport)
+      keyring.setTransport(transport);
       const accounts = keyring.getFirstPage();
       return {
         ...accounts,
-        balance: '0x0'
-      }
-    } catch(e) {
-      console.log('err')
+        balance: '0x0',
+      };
+    } catch (e) {
+      console.log('err', e);
     }
-  }
+  };
 
   /**
    * Effectively the same as creating a new keychain then populating it
