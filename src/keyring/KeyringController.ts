@@ -255,18 +255,18 @@ export class KeyringController extends BaseController<
   connectLedgerHardware = async (transport: any) => {
     const keyring = await this.getLedgerKeyring();
     keyring.setTransport(transport);
-    const addresses = await keyring.getFirstPage();
+    const address = await keyring.getDefaultAccount();
 
-    return addresses.map((address: string) => ({
-      address,
-      balance: '0x0',
-    }));
+    return [
+      {
+        address,
+        balance: '0x0',
+      },
+    ];
   };
 
-  unlockLedgerHardwareWalletAccount = async (accountIndex: number) => {
+  unlockLedgerDefaultAccount = async () => {
     const keyring = await this.getLedgerKeyring();
-
-    keyring.setAccountToUnlock(accountIndex);
 
     const oldAccounts = await privates.get(this).keyring.getAccounts();
     await privates.get(this).keyring.addNewAccount(keyring);
@@ -274,13 +274,10 @@ export class KeyringController extends BaseController<
 
     this.updateIdentities(newAccounts);
 
-    newAccounts.forEach((address: string) => {
+    newAccounts.forEach((address: string, index: number) => {
       if (!oldAccounts.includes(address)) {
         if (this.setAccountLabel) {
-          this.setAccountLabel(
-            address,
-            `${keyring.getName()} ${accountIndex + 1}`,
-          );
+          this.setAccountLabel(address, `${keyring.getName()} ${index + 1}`);
         }
         this.setSelectedAddress(address);
       }
