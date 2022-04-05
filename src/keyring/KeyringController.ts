@@ -252,9 +252,9 @@ export class KeyringController extends BaseController<
     return await this.addLedgerKeyring();
   }
 
-  connectLedgerHardware = async (transport: any) => {
+  connectLedgerHardware = async (transport: any, deviceId: string) => {
     const keyring = await this.getLedgerKeyring();
-    keyring.setTransport(transport);
+    keyring.setTransport(transport, deviceId);
     const { appName } = await keyring.getAppAndVersion();
     return appName;
   };
@@ -263,12 +263,10 @@ export class KeyringController extends BaseController<
     const keyring = await this.getLedgerKeyring();
     keyring.setTransport(transport);
     const address = await keyring.getDefaultAccount();
-    return [
-      {
-        address,
-        balance: '0x0',
-      },
-    ];
+    return {
+      address,
+      balance: '0x0',
+    };
   };
 
   unlockLedgerDefaultAccount = async () => {
@@ -290,12 +288,10 @@ export class KeyringController extends BaseController<
     this.fullUpdate();
 
     const address = await keyring.getDefaultAccount();
-    return [
-      {
-        address,
-        balance: `0x0`,
-      },
-    ];
+    return {
+      address,
+      balance: `0x0`,
+    };
   };
 
   /**
