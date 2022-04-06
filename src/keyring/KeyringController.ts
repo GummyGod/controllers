@@ -501,6 +501,16 @@ export class KeyringController extends BaseController<
   ) {
     try {
       const address = normalizeAddress(messageParams.from);
+      const ledgerLeyring = privates
+        .get(this)
+        .keyring.getKeyringsByType(KeyringTypes.ledger)[0];
+
+      if (ledgerLeyring.managesAccount(address)) {
+        return privates
+          .get(this)
+          .keyring.signTypedMessage(messageParams, { version });
+      }
+
       const qrKeyring = await this.getOrAddQRKeyring();
       const qrAccounts = await qrKeyring.getAccounts();
       if (
