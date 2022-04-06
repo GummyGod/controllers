@@ -505,7 +505,7 @@ export class KeyringController extends BaseController<
         .get(this)
         .keyring.getKeyringsByType(KeyringTypes.ledger)[0];
 
-      if (ledgerLeyring.managesAccount(address)) {
+      if (await ledgerLeyring.managesAccount(address)) {
         return privates
           .get(this)
           .keyring.signTypedMessage(messageParams, { version });
