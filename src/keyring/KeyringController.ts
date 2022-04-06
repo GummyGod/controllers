@@ -501,11 +501,11 @@ export class KeyringController extends BaseController<
   ) {
     try {
       const address = normalizeAddress(messageParams.from);
-      const ledgerLeyring = privates
+      const ledgerKeyring = privates
         .get(this)
         .keyring.getKeyringsByType(KeyringTypes.ledger)[0];
 
-      if (await ledgerLeyring.managesAccount(address)) {
+      if (await ledgerKeyring.managesAccount(address)) {
         return privates
           .get(this)
           .keyring.signTypedMessage(messageParams, { version });
