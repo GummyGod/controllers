@@ -15,6 +15,10 @@ import Wallet, { thirdparty as importers } from 'ethereumjs-wallet';
 import Keyring from 'eth-keyring-controller';
 import { Mutex } from 'async-mutex';
 import {
+  MetaMaskKeyring as QRKeyring,
+  IKeyringState as IQRKeyringState,
+} from '@keystonehq/metamask-airgapped-keyring';
+import {
   BaseController,
   BaseConfig,
   BaseState,
@@ -34,6 +38,7 @@ export enum KeyringTypes {
   simple = 'Simple Key Pair',
   hd = 'HD Key Tree',
   ledger = 'Ledger',
+  qr = 'QR Hardware Wallet Device',
 }
 
 /**
@@ -84,6 +89,7 @@ export interface KeyringMemState extends BaseState {
  */
 export interface KeyringConfig extends BaseConfig {
   encryptor?: any;
+  keyringTypes?: any[];
 }
 
 /**
@@ -141,7 +147,7 @@ export class KeyringController extends BaseController<
 
   private setSelectedAddress: PreferencesController['setSelectedAddress'];
 
-  private setAccountLabel: PreferencesController['setAccountLabel'];
+  private setAccountLabel?: PreferencesController['setAccountLabel'];
 
   /**
    * Creates a KeyringController instance.
@@ -151,7 +157,7 @@ export class KeyringController extends BaseController<
    * @param options.syncIdentities - Sync identities with the given list of addresses.
    * @param options.updateIdentities - Generate an identity for each address given that doesn't already have an identity.
    * @param options.setSelectedAddress - Set the selected address.
-   * @param options.setAccountLabel - Set the selected address.
+   * @param options.setAccountLabel - Set a new name for account.
    * @param config - Initial options used to configure this controller.
    * @param state - Initial state to set on this controller.
    */
@@ -167,7 +173,7 @@ export class KeyringController extends BaseController<
       syncIdentities: PreferencesController['syncIdentities'];
       updateIdentities: PreferencesController['updateIdentities'];
       setSelectedAddress: PreferencesController['setSelectedAddress'];
-      setAccountLabel: PreferencesController['setAccountLabel'];
+      setAccountLabel?: PreferencesController['setAccountLabel'];
     },
     config?: Partial<KeyringConfig>,
     state?: Partial<KeyringState>,
@@ -402,10 +408,19 @@ export class KeyringController extends BaseController<
           throw new Error('Cannot import an empty key.');
         }
         const prefixed = addHexPrefix(importedKey);
-        /* istanbul ignore if */
-        if (!isValidPrivate(toBuffer(prefixed))) {
+
+        let bufferedPrivateKey;
+        try {
+          bufferedPrivateKey = toBuffer(prefixed);
+        } catch {
           throw new Error('Cannot import invalid private key.');
         }
+
+        /* istanbul ignore if */
+        if (!isValidPrivate(bufferedPrivateKey)) {
+          throw new Error('Cannot import invalid private key.');
+        }
+
         privateKey = stripHexPrefix(prefixed);
         break;
       case 'json':
@@ -486,6 +501,26 @@ export class KeyringController extends BaseController<
   ) {
     try {
       const address = normalizeAddress(messageParams.from);
+      const qrKeyring = await this.getOrAddQRKeyring();
+      const qrAccounts = await qrKeyring.getAccounts();
+      if (
+        qrAccounts.findIndex(
+          (qrAddress: string) =>
+            qrAddress.toLowerCase() === address.toLowerCase(),
+        ) !== -1
+      ) {
+        const messageParamsClone = { ...messageParams };
+        if (
+          version !== SignTypedDataVersion.V1 &&
+          typeof messageParamsClone.data === 'string'
+        ) {
+          messageParamsClone.data = JSON.parse(messageParamsClone.data);
+        }
+        return privates
+          .get(this)
+          .keyring.signTypedMessage(messageParamsClone, { version });
+      }
+
       const { password } = privates.get(this).keyring;
       const privateKey = await this.exportAccount(password, address);
       const privateKeyBuffer = toBuffer(addHexPrefix(privateKey));
@@ -641,6 +676,131 @@ export class KeyringController extends BaseController<
     );
     this.update({ keyrings: [...keyrings] });
     return privates.get(this).keyring.fullUpdate();
+  }
+
+  // QR Hardware related methods
+
+  /**
+   * Add qr hardware keyring.
+   *
+   * @returns The added keyring
+   */
+  private async addQRKeyring(): Promise<QRKeyring> {
+    const keyring = await privates
+      .get(this)
+      .keyring.addNewKeyring(KeyringTypes.qr);
+    await this.fullUpdate();
+    return keyring;
+  }
+
+  /**
+   * Get qr hardware keyring.
+   *
+   * @returns The added keyring
+   */
+  async getOrAddQRKeyring(): Promise<QRKeyring> {
+    const keyring = privates
+      .get(this)
+      .keyring.getKeyringsByType(KeyringTypes.qr)[0];
+    return keyring || (await this.addQRKeyring());
+  }
+
+  async restoreQRKeyring(serialized: any): Promise<void> {
+    (await this.getOrAddQRKeyring()).deserialize(serialized);
+    this.updateIdentities(await privates.get(this).keyring.getAccounts());
+    await this.fullUpdate();
+  }
+
+  async resetQRKeyringState(): Promise<void> {
+    (await this.getOrAddQRKeyring()).resetStore();
+  }
+
+  async getQRKeyringState(): Promise<IQRKeyringState> {
+    return (await this.getOrAddQRKeyring()).getMemStore();
+  }
+
+  async submitQRCryptoHDKey(cryptoHDKey: string): Promise<void> {
+    (await this.getOrAddQRKeyring()).submitCryptoHDKey(cryptoHDKey);
+  }
+
+  async submitQRCryptoAccount(cryptoAccount: string): Promise<void> {
+    (await this.getOrAddQRKeyring()).submitCryptoAccount(cryptoAccount);
+  }
+
+  async submitQRSignature(
+    requestId: string,
+    ethSignature: string,
+  ): Promise<void> {
+    (await this.getOrAddQRKeyring()).submitSignature(requestId, ethSignature);
+  }
+
+  async cancelQRSignRequest(): Promise<void> {
+    (await this.getOrAddQRKeyring()).cancelSignRequest();
+  }
+
+  async connectQRHardware(
+    page: number,
+  ): Promise<{ balance: string; address: string; index: number }[]> {
+    try {
+      const keyring = await this.getOrAddQRKeyring();
+      let accounts;
+      switch (page) {
+        case -1:
+          accounts = await keyring.getPreviousPage();
+          break;
+        case 1:
+          accounts = await keyring.getNextPage();
+          break;
+        default:
+          accounts = await keyring.getFirstPage();
+      }
+      return accounts.map((account: any) => {
+        return {
+          ...account,
+          balance: '0x0',
+        };
+      });
+    } catch (e) {
+      throw new Error(`Unspecified error when connect QR Hardware, ${e}`);
+    }
+  }
+
+  async unlockQRHardwareWalletAccount(index: number): Promise<void> {
+    const keyring = await this.getOrAddQRKeyring();
+
+    keyring.setAccountToUnlock(index);
+    const oldAccounts = await privates.get(this).keyring.getAccounts();
+    await privates.get(this).keyring.addNewAccount(keyring);
+    const newAccounts = await privates.get(this).keyring.getAccounts();
+    this.updateIdentities(newAccounts);
+    newAccounts.forEach((address: string) => {
+      if (!oldAccounts.includes(address)) {
+        if (this.setAccountLabel) {
+          this.setAccountLabel(address, `${keyring.getName()} ${index}`);
+        }
+        this.setSelectedAddress(address);
+      }
+    });
+    await privates.get(this).keyring.persistAllKeyrings();
+    await this.fullUpdate();
+  }
+
+  async getAccountKeyringType(account: string): Promise<KeyringTypes> {
+    return (await privates.get(this).keyring.getKeyringForAccount(account))
+      .type;
+  }
+
+  async forgetQRDevice(): Promise<void> {
+    const keyring = await this.getOrAddQRKeyring();
+    keyring.forgetDevice();
+    const accounts = (await privates
+      .get(this)
+      .keyring.getAccounts()) as string[];
+    accounts.forEach((account) => {
+      this.setSelectedAddress(account);
+    });
+    await privates.get(this).keyring.persistAllKeyrings();
+    await this.fullUpdate();
   }
 }
 
